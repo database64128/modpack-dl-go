@@ -245,6 +245,7 @@ func (j *Job) runWithoutSecondaryDestinationPath(ctx context.Context, logger *sl
 				slog.String("path", j.MigrateFromPath),
 				slog.Any("error", err),
 			)
+			return
 		}
 
 		logger.LogAttrs(ctx, slog.LevelInfo, "Removed migration source file", slog.String("path", j.MigrateFromPath))
@@ -304,6 +305,7 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 			src = f2
 			dst = f1
 		}
+
 		if _, err = copyWholeFile(dst, src); err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to copy file",
 				slog.String("src", src.Name()),
@@ -311,6 +313,12 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 				slog.Any("error", err),
 			)
 		}
+
+		logger.LogAttrs(ctx, slog.LevelInfo, "Copied existing file",
+			slog.String("src", src.Name()),
+			slog.String("dst", dst.Name()),
+		)
+
 		src.Close()
 		dst.Close()
 		return
@@ -411,7 +419,10 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 				slog.String("path", j.MigrateFromPath),
 				slog.Any("error", err),
 			)
+			return
 		}
+
+		logger.LogAttrs(ctx, slog.LevelInfo, "Removed migration source file", slog.String("path", j.MigrateFromPath))
 	}
 }
 
