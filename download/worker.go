@@ -15,6 +15,10 @@ type Job struct {
 	// DownloadURL is the target file's download URL.
 	DownloadURL string
 
+	// UserAgent is the user agent to use for the request.
+	// If empty, Go's default behavior is preserved.
+	UserAgent string
+
 	// TargetFile is the target file.
 	TargetFile *os.File
 
@@ -66,6 +70,10 @@ func (j *Job) run(ctx context.Context, logger *slog.Logger, client *http.Client)
 			slog.Any("error", err),
 		)
 		return
+	}
+
+	if j.UserAgent != "" {
+		req.Header["User-Agent"] = []string{j.UserAgent}
 	}
 
 	resp, err := client.Do(req)

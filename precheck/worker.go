@@ -29,6 +29,10 @@ type Job struct {
 	// DownloadURL is the target file's download URL.
 	DownloadURL string
 
+	// UserAgent is the user agent to use for the request.
+	// If empty, Go's default behavior is preserved.
+	UserAgent string
+
 	// MigrateFromPath is the path to a possible existing file.
 	// The path may be empty. The file may not exist or may have different content.
 	MigrateFromPath string
@@ -134,6 +138,7 @@ func (j *Job) createAndCheckFile(path string) (*os.File, bool, error) {
 func (j *Job) sendDownloadJob(ctx context.Context, logger *slog.Logger, djch chan<- download.Job, f1, f2 *os.File) {
 	djch <- download.Job{
 		DownloadURL:         j.DownloadURL,
+		UserAgent:           j.UserAgent,
 		TargetFile:          f1,
 		SecondaryTargetFile: f2,
 	}
