@@ -196,8 +196,14 @@ func NewWorkerFleet(ctx context.Context, logger *slog.Logger, client *http.Clien
 	for i := 0; i < numWorkers; i++ {
 		go func() {
 			defer wf.wg.Done()
+			done := ctx.Done()
 			for job := range jobCh {
-				job.Run(ctx, logger, client)
+				select {
+				case <-done:
+					continue
+				default:
+					job.Run(ctx, logger, client)
+				}
 			}
 		}()
 	}

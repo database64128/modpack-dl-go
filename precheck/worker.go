@@ -463,8 +463,14 @@ func NewWorkerFleet(ctx context.Context, logger *slog.Logger, pjch <-chan Job) *
 	for i := 0; i < ncpu; i++ {
 		go func() {
 			defer wf.wg.Done()
+			done := ctx.Done()
 			for pj := range pjch {
+				select {
+				case <-done:
+					continue
+				default:
 				pj.Run(ctx, logger, wf.djch)
+				}
 			}
 		}()
 	}
