@@ -35,6 +35,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *downloadConcurrency <= 0 {
+		fmt.Println("Download concurrency must be positive.")
+		flag.Usage()
+		os.Exit(1)
+	}
+
 	logger := slog.Default()
 	ctx, cancel := context.WithCancel(context.Background())
 
