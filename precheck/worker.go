@@ -362,6 +362,11 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 			slog.Any("error", err),
 		)
 		hasCopyError = true
+	} else {
+		logger.LogAttrs(ctx, slog.LevelInfo, "Copied existing file",
+			slog.String("src", f3.Name()),
+			slog.String("dst", f1.Name()),
+		)
 	}
 
 	f1.Close()
@@ -407,28 +412,29 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 			slog.Any("error", err),
 		)
 		hasCopyError = true
+	} else {
+		logger.LogAttrs(ctx, slog.LevelInfo, "Copied existing file",
+			slog.String("src", f3.Name()),
+			slog.String("dst", f2.Name()),
+		)
 	}
 
 	f2.Close()
 	f3.Close()
 
-	logger.LogAttrs(ctx, slog.LevelInfo, "Copied existing file",
-		slog.String("src", f3.Name()),
-		slog.String("dst", f1.Name()),
-		slog.String("secondaryDst", f2.Name()),
-	)
-
-	if !hasCopyError && !j.PreserveMigrationSource {
-		if err = os.Remove(j.MigrateFromPath); err != nil {
-			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to remove migration source file",
-				slog.String("path", j.MigrateFromPath),
-				slog.Any("error", err),
-			)
-			return
-		}
-
-		logger.LogAttrs(ctx, slog.LevelInfo, "Removed migration source file", slog.String("path", j.MigrateFromPath))
+	if hasCopyError || j.PreserveMigrationSource {
+		return
 	}
+
+	if err = os.Remove(j.MigrateFromPath); err != nil {
+		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to remove migration source file",
+			slog.String("path", j.MigrateFromPath),
+			slog.Any("error", err),
+		)
+		return
+	}
+
+	logger.LogAttrs(ctx, slog.LevelInfo, "Removed migration source file", slog.String("path", j.MigrateFromPath))
 }
 
 // Run runs the job.
@@ -469,7 +475,7 @@ func NewWorkerFleet(ctx context.Context, logger *slog.Logger, pjch <-chan Job) *
 				case <-done:
 					continue
 				default:
-				pj.Run(ctx, logger, wf.djch)
+					pj.Run(ctx, logger, wf.djch)
 				}
 			}
 		}()
