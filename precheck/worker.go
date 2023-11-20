@@ -204,6 +204,12 @@ func (j *Job) runWithoutSecondaryDestinationPath(ctx context.Context, logger *sl
 				)
 				return
 			}
+
+			logger.LogAttrs(ctx, slog.LevelDebug, "Rename failed, falling back to copy & remove",
+				slog.String("src", j.MigrateFromPath),
+				slog.String("dst", j.DestinationPath),
+				slog.Any("error", err),
+			)
 		}
 
 		// Fall back to copy & remove.
@@ -385,6 +391,12 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 			)
 			return
 		}
+
+		logger.LogAttrs(ctx, slog.LevelDebug, "Rename failed, falling back to copy & remove",
+			slog.String("src", j.MigrateFromPath),
+			slog.String("dst", j.SecondaryDestinationPath),
+			slog.Any("error", err),
+		)
 
 		// Open the files again to fall back to copy & remove.
 		f2, err = os.OpenFile(j.SecondaryDestinationPath, os.O_RDWR, 0644)
