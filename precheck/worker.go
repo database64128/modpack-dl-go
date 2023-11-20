@@ -225,7 +225,6 @@ func (j *Job) runWithoutSecondaryDestinationPath(ctx context.Context, logger *sl
 			)
 			return
 		}
-		defer src.Close()
 
 		if _, err = dst.ReadFrom(src); err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to copy file",
@@ -233,8 +232,11 @@ func (j *Job) runWithoutSecondaryDestinationPath(ctx context.Context, logger *sl
 				slog.String("dst", dst.Name()),
 				slog.Any("error", err),
 			)
+			src.Close()
 			return
 		}
+
+		src.Close()
 
 		logger.LogAttrs(ctx, slog.LevelInfo, "Copied existing file",
 			slog.String("src", src.Name()),
