@@ -26,6 +26,12 @@ var (
 	downloadConcurrency     = flag.Int("downloadConcurrency", 32, "Optional. Number of concurrent downloads")
 )
 
+var logLevel slog.Level
+
+func init() {
+	flag.TextVar(&logLevel, "logLevel", slog.LevelInfo, "Log level")
+}
+
 func main() {
 	flag.Parse()
 
@@ -41,7 +47,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger := slog.Default()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel}))
 	ctx, cancel := context.WithCancel(context.Background())
 
 	sigCh := make(chan os.Signal, 1)
