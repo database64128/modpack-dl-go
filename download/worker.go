@@ -96,14 +96,6 @@ func (j *Job) run(ctx context.Context, logger *slog.Logger, client *http.Client)
 		return
 	}
 
-	if _, err = j.TargetFile.Seek(0, io.SeekStart); err != nil {
-		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to seek to start of file",
-			slog.String("name", j.TargetFile.Name()),
-			slog.Any("error", err),
-		)
-		return
-	}
-
 	if _, err = j.TargetFile.ReadFrom(resp.Body); err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to download file",
 			slog.String("name", j.TargetFile.Name()),
@@ -122,14 +114,6 @@ func (j *Job) run(ctx context.Context, logger *slog.Logger, client *http.Client)
 		if _, err = j.TargetFile.Seek(0, io.SeekStart); err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to seek to start of file",
 				slog.String("name", j.TargetFile.Name()),
-				slog.Any("error", err),
-			)
-			return
-		}
-
-		if _, err = j.SecondaryTargetFile.Seek(0, io.SeekStart); err != nil {
-			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to seek to start of file",
-				slog.String("name", j.SecondaryTargetFile.Name()),
 				slog.Any("error", err),
 			)
 			return
