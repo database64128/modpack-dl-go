@@ -8,6 +8,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -29,6 +30,8 @@ const (
 	// so we pretend to be https://github.com/CreeperHost/modpacksch-serverdownloader.
 	APIUserAgent = "modpackserverdownloader/1.0"
 )
+
+var ErrPathSanitization = errors.New("path rejected by sanitization")
 
 // ModpackClient is a client for the modpacks.ch API.
 type ModpackClient struct {
@@ -247,6 +250,10 @@ func (f *ModpackVersionFile) PrecheckJob(
 	migrateFromPath, clientPath, serverPath string,
 	preserveMigrationSource bool,
 ) (precheck.Job, bool, error) {
+	if !filepath.IsLocal(f.Path) {
+		return precheck.Job{}, false, ErrPathSanitization
+	}
+
 	var destinationPath, secondaryDestinationPath string
 	if !f.ServerOnly && clientPath != "" {
 		destinationPath = filepath.Join(clientPath, f.Path, f.Name)
