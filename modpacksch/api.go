@@ -26,6 +26,9 @@ const (
 	// APIPublicModpack is the path of the public modpack endpoint.
 	APIPublicModpack = "/public/modpack"
 
+	// APIPublicCurseForge is the path of the public CurseForge endpoint.
+	APIPublicCurseForge = "/public/curseforge"
+
 	// APIUserAgent is the user agent used for API requests.
 	// The FTB folks don't like seeing people download their stuff from unofficial clients,
 	// so we pretend to be https://github.com/CreeperHost/modpacksch-serverdownloader.
@@ -49,65 +52,69 @@ func NewModpackClient(client *http.Client) *ModpackClient {
 
 // GetPublicModpackManifest gets the manifest of a public modpack with the given ID.
 func (c *ModpackClient) GetPublicModpackManifest(ctx context.Context, modpackID int64) (ModpackManifest, error) {
-	return getPublicModpackManifest(ctx, c.client, modpackID)
+	return doGetRequest[ModpackManifest](ctx, c.client, fmt.Sprintf(APIBaseURL+APIPublicModpack+"/%d", modpackID))
 }
 
 // GetPublicModpackVersionManifest gets the manifest of a public modpack version with the given modpack and version IDs.
 func (c *ModpackClient) GetPublicModpackVersionManifest(ctx context.Context, modpackID, versionID int64) (ModpackVersionManifest, error) {
-	return getPublicModpackVersionManifest(ctx, c.client, modpackID, versionID)
+	return doGetRequest[ModpackVersionManifest](ctx, c.client, fmt.Sprintf(APIBaseURL+APIPublicModpack+"/%d/%d", modpackID, versionID))
 }
+
+// GetCurseForgeModpackManifest gets the manifest of a CurseForge modpack with the given ID.
+func (c *ModpackClient) GetCurseForgeModpackManifest(ctx context.Context, modpackID int64) (ModpackManifest, error) {
+	return doGetRequest[ModpackManifest](ctx, c.client, fmt.Sprintf(APIBaseURL+APIPublicCurseForge+"/%d", modpackID))
+}
+
+// GetCurseForgeModpackVersionManifest gets the manifest of a CurseForge modpack version with the given modpack and version IDs.
+func (c *ModpackClient) GetCurseForgeModpackVersionManifest(ctx context.Context, modpackID, versionID int64) (ModpackVersionManifest, error) {
+	return doGetRequest[ModpackVersionManifest](ctx, c.client, fmt.Sprintf(APIBaseURL+APIPublicCurseForge+"/%d/%d", modpackID, versionID))
+}
+
+// DefaultModpackClient is the default [ModpackClient].
+var DefaultModpackClient = NewModpackClient(http.DefaultClient)
 
 // GetPublicModpackManifest gets the manifest of a public modpack with the given ID.
 func GetPublicModpackManifest(ctx context.Context, modpackID int64) (ModpackManifest, error) {
-	return getPublicModpackManifest(ctx, http.DefaultClient, modpackID)
+	return DefaultModpackClient.GetPublicModpackManifest(ctx, modpackID)
 }
 
 // GetPublicModpackVersionManifest gets the manifest of a public modpack version with the given modpack and version IDs.
 func GetPublicModpackVersionManifest(ctx context.Context, modpackID, versionID int64) (ModpackVersionManifest, error) {
-	return getPublicModpackVersionManifest(ctx, http.DefaultClient, modpackID, versionID)
+	return DefaultModpackClient.GetPublicModpackVersionManifest(ctx, modpackID, versionID)
 }
 
-func getPublicModpackManifest(ctx context.Context, client *http.Client, modpackID int64) (ModpackManifest, error) {
-	resp, err := sendGetRequest(ctx, client, fmt.Sprintf(APIBaseURL+APIPublicModpack+"/%d", modpackID))
-	if err != nil {
-		return ModpackManifest{}, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var manifest ModpackManifest
-	if err = json.NewDecoder(resp.Body).Decode(&manifest); err != nil {
-		return ModpackManifest{}, fmt.Errorf("failed to decode response: %w", err)
-	}
-	return manifest, nil
+// GetCurseForgeModpackManifest gets the manifest of a CurseForge modpack with the given ID.
+func GetCurseForgeModpackManifest(ctx context.Context, modpackID int64) (ModpackManifest, error) {
+	return DefaultModpackClient.GetCurseForgeModpackManifest(ctx, modpackID)
 }
 
-func getPublicModpackVersionManifest(ctx context.Context, client *http.Client, modpackID, versionID int64) (ModpackVersionManifest, error) {
-	resp, err := sendGetRequest(ctx, client, fmt.Sprintf(APIBaseURL+APIPublicModpack+"/%d/%d", modpackID, versionID))
-	if err != nil {
-		return ModpackVersionManifest{}, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var manifest ModpackVersionManifest
-	if err = json.NewDecoder(resp.Body).Decode(&manifest); err != nil {
-		return ModpackVersionManifest{}, fmt.Errorf("failed to decode response: %w", err)
-	}
-	return manifest, nil
+// GetCurseForgeModpackVersionManifest gets the manifest of a CurseForge modpack version with the given modpack and version IDs.
+func GetCurseForgeModpackVersionManifest(ctx context.Context, modpackID, versionID int64) (ModpackVersionManifest, error) {
+	return DefaultModpackClient.GetCurseForgeModpackVersionManifest(ctx, modpackID, versionID)
 }
 
-// sendGetRequest sends a GET request to the given URL.
-func sendGetRequest(ctx context.Context, client *http.Client, url string) (*http.Response, error) {
+// doGetRequest sends a GET request to the given URL and returns the response unmarshaled from JSON.
+func doGetRequest[V any](ctx context.Context, client *http.Client, url string) (v V, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return v, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header["User-Agent"] = []string{APIUserAgent}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
+		return v, fmt.Errorf("failed to send request: %w", err)
 	}
-	return resp, nil
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return v, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	if err = json.NewDecoder(resp.Body).Decode(&v); err != nil {
+		return v, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return v, nil
 }
 
 // ModpackManifest is the manifest of a modpack.

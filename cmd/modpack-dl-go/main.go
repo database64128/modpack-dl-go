@@ -23,6 +23,7 @@ var (
 	serverPath              string
 	migrateFromPath         string
 	preserveMigrationSource bool
+	curseforge              bool
 	downloadConcurrency     int
 	logLevel                slog.Level
 )
@@ -34,6 +35,7 @@ func init() {
 	flag.StringVar(&serverPath, "serverPath", "", "Optional. Download the modpack server to the specified path")
 	flag.StringVar(&migrateFromPath, "migrateFromPath", "", "Optional. Migrate the modpack from the specified path")
 	flag.BoolVar(&preserveMigrationSource, "preserveMigrationSource", false, "Migrate by copying instead of moving files")
+	flag.BoolVar(&curseforge, "curseforge", false, "ID is a CurseForge project ID instead of a modpacks.ch public modpack ID")
 	flag.IntVar(&downloadConcurrency, "downloadConcurrency", 32, "Optional. Number of concurrent downloads")
 	flag.TextVar(&logLevel, "logLevel", slog.LevelInfo, "Log level")
 }
@@ -64,7 +66,15 @@ func main() {
 		cancel()
 	}()
 
-	modpackManifest, err := modpacksch.GetPublicModpackManifest(ctx, modpackID)
+	var (
+		modpackManifest modpacksch.ModpackManifest
+		err             error
+	)
+	if !curseforge {
+		modpackManifest, err = modpacksch.GetPublicModpackManifest(ctx, modpackID)
+	} else {
+		modpackManifest, err = modpacksch.GetCurseForgeModpackManifest(ctx, modpackID)
+	}
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelError, "Failed to get modpack manifest",
 			slog.Int64("modpackID", modpackID),
@@ -89,7 +99,12 @@ func main() {
 		versionID = version.ID
 	}
 
-	versionManifest, err := modpacksch.GetPublicModpackVersionManifest(ctx, modpackID, versionID)
+	var versionManifest modpacksch.ModpackVersionManifest
+	if !curseforge {
+		versionManifest, err = modpacksch.GetPublicModpackVersionManifest(ctx, modpackID, versionID)
+	} else {
+		versionManifest, err = modpacksch.GetCurseForgeModpackVersionManifest(ctx, modpackID, versionID)
+	}
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelError, "Failed to get modpack version manifest",
 			slog.Int64("modpackID", modpackID),
