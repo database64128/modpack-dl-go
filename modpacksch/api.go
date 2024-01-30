@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -31,7 +32,10 @@ const (
 	APIUserAgent = "modpackserverdownloader/1.0"
 )
 
-var ErrPathSanitization = errors.New("path rejected by sanitization")
+var (
+	ErrPathSanitization = errors.New("path rejected by sanitization")
+	ErrMissingURL       = errors.New("missing URL")
+)
 
 // ModpackClient is a client for the modpacks.ch API.
 type ModpackClient struct {
@@ -134,6 +138,9 @@ type ModpackManifest struct {
 func (m *ModpackManifest) LatestVersion() (ModpackVersion, bool) {
 	if len(m.Versions) == 0 {
 		return ModpackVersion{}, false
+	}
+	if m.Provider == "curseforge" {
+		return m.Versions[0], true
 	}
 	return m.Versions[len(m.Versions)-1], true
 }
@@ -243,6 +250,8 @@ type ModpackVersionFile struct {
 	ServerOnly bool `json:"serveronly"`
 	Optional   bool `json:"optional"`
 	ResourceBase
+
+	CurseForge *CurseForgeFile `json:"curseforge,omitempty"`
 }
 
 // PrecheckJob returns a precheck job for the file.
@@ -252,6 +261,14 @@ func (f *ModpackVersionFile) PrecheckJob(
 ) (precheck.Job, bool, error) {
 	if !filepath.IsLocal(f.Path) {
 		return precheck.Job{}, false, ErrPathSanitization
+	}
+
+	url := f.URL
+	if url == "" {
+		if f.CurseForge == nil {
+			return precheck.Job{}, false, ErrMissingURL
+		}
+		url = f.CurseForge.DownloadURL(f.Name)
 	}
 
 	var destinationPath, secondaryDestinationPath string
@@ -280,7 +297,7 @@ func (f *ModpackVersionFile) PrecheckJob(
 	}
 
 	return precheck.Job{
-		DownloadURL:              f.URL,
+		DownloadURL:              url,
 		UserAgent:                APIUserAgent,
 		MigrateFromPath:          migrateFromPath,
 		PreserveMigrationSource:  preserveMigrationSource,
@@ -292,15 +309,17 @@ func (f *ModpackVersionFile) PrecheckJob(
 	}, true, nil
 }
 
-// FileBase contains basic information about a remote file.
-type FileBase struct {
-	URL     string   `json:"url"`
-	Mirrors []string `json:"mirrors"`
-	SHA1    string   `json:"sha1"`
-	Size    int64    `json:"size"`
-	ID      int64    `json:"id"`
-	Type    string   `json:"type"`
-	Updated Time     `json:"updated"`
+// CurseForgeFile is a file under a CurseForge project.
+type CurseForgeFile struct {
+	Project int64 `json:"project"`
+	File    int64 `json:"file"`
+}
+
+// DownloadURL returns the download URL of the file.
+func (f *CurseForgeFile) DownloadURL(name string) string {
+	// https://minecraft.curseforge.com/projects/%d/files/%d/download returns 403,
+	// so we try to guess the real URL from filename.
+	return fmt.Sprintf("https://edge.forgecdn.net/files/%d/%d/%s", f.Project, f.File, url.PathEscape(name))
 }
 
 // ResourceBase contains basic information about a remote resource.
