@@ -244,7 +244,8 @@ type ModpackVersionManifest struct {
 
 // ModpackVersionFile is a file in a modpack version's file list.
 type ModpackVersionFile struct {
-	Version string   `json:"version"`
+	// "version: int64" is in quotes for public modpacks, but not for CurseForge modpacks.
+
 	Path    string   `json:"path"`
 	URL     string   `json:"url"`
 	Mirrors []string `json:"mirrors"`
