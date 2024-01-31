@@ -40,57 +40,93 @@ var (
 	ErrMissingURL       = errors.New("missing URL")
 )
 
-// ModpackClient is a client for the modpacks.ch API.
-type ModpackClient struct {
+// ModpackClient is a modpack client for the modpacks.ch API.
+type ModpackClient interface {
+	// GetModpackManifest gets the manifest of a modpack with the given ID.
+	GetModpackManifest(ctx context.Context, modpackID int64) (ModpackManifest, error)
+
+	// GetModpackVersionManifest gets the manifest of a modpack version with the given modpack ID and version ID.
+	GetModpackVersionManifest(ctx context.Context, modpackID, versionID int64) (ModpackVersionManifest, error)
+}
+
+// PublicModpackClient is a modpack client for the modpacks.ch public modpack API.
+//
+// PublicModpackClient implements [ModpackClient].
+type PublicModpackClient struct {
 	client *http.Client
 }
 
-// NewModpackClient creates a new [ModpackClient].
-func NewModpackClient(client *http.Client) *ModpackClient {
-	return &ModpackClient{client: client}
+// NewPublicModpackClient creates a new [PublicModpackClient].
+func NewPublicModpackClient(client *http.Client) *PublicModpackClient {
+	return &PublicModpackClient{client: client}
 }
 
-// GetPublicModpackManifest gets the manifest of a public modpack with the given ID.
-func (c *ModpackClient) GetPublicModpackManifest(ctx context.Context, modpackID int64) (ModpackManifest, error) {
+// GetModpackManifest gets the manifest of a public modpack with the given ID.
+//
+// GetModpackManifest implements [ModpackClient.GetModpackManifest].
+func (c *PublicModpackClient) GetModpackManifest(ctx context.Context, modpackID int64) (ModpackManifest, error) {
 	return doGetRequest[ModpackManifest](ctx, c.client, fmt.Sprintf(APIBaseURL+APIPublicModpack+"/%d", modpackID))
 }
 
-// GetPublicModpackVersionManifest gets the manifest of a public modpack version with the given modpack and version IDs.
-func (c *ModpackClient) GetPublicModpackVersionManifest(ctx context.Context, modpackID, versionID int64) (ModpackVersionManifest, error) {
+// GetModpackVersionManifest gets the manifest of a public modpack version with the given modpack ID and version ID.
+//
+// GetModpackVersionManifest implements [ModpackClient.GetModpackVersionManifest].
+func (c *PublicModpackClient) GetModpackVersionManifest(ctx context.Context, modpackID, versionID int64) (ModpackVersionManifest, error) {
 	return doGetRequest[ModpackVersionManifest](ctx, c.client, fmt.Sprintf(APIBaseURL+APIPublicModpack+"/%d/%d", modpackID, versionID))
 }
 
-// GetCurseForgeModpackManifest gets the manifest of a CurseForge modpack with the given ID.
-func (c *ModpackClient) GetCurseForgeModpackManifest(ctx context.Context, modpackID int64) (ModpackManifest, error) {
+// CurseForgeModpackClient is a modpack client for the modpacks.ch CurseForge modpack API.
+//
+// CurseForgeModpackClient implements [ModpackClient].
+type CurseForgeModpackClient struct {
+	client *http.Client
+}
+
+// NewCurseForgeModpackClient creates a new [CurseForgeModpackClient].
+func NewCurseForgeModpackClient(client *http.Client) *CurseForgeModpackClient {
+	return &CurseForgeModpackClient{client: client}
+}
+
+// GetModpackManifest gets the manifest of a CurseForge modpack with the given ID.
+//
+// GetModpackManifest implements [ModpackClient.GetModpackManifest].
+func (c *CurseForgeModpackClient) GetModpackManifest(ctx context.Context, modpackID int64) (ModpackManifest, error) {
 	return doGetRequest[ModpackManifest](ctx, c.client, fmt.Sprintf(APIBaseURL+APIPublicCurseForge+"/%d", modpackID))
 }
 
-// GetCurseForgeModpackVersionManifest gets the manifest of a CurseForge modpack version with the given modpack and version IDs.
-func (c *ModpackClient) GetCurseForgeModpackVersionManifest(ctx context.Context, modpackID, versionID int64) (ModpackVersionManifest, error) {
+// GetModpackVersionManifest gets the manifest of a CurseForge modpack version with the given modpack ID and version ID.
+//
+// GetModpackVersionManifest implements [ModpackClient.GetModpackVersionManifest].
+func (c *CurseForgeModpackClient) GetModpackVersionManifest(ctx context.Context, modpackID, versionID int64) (ModpackVersionManifest, error) {
 	return doGetRequest[ModpackVersionManifest](ctx, c.client, fmt.Sprintf(APIBaseURL+APIPublicCurseForge+"/%d/%d", modpackID, versionID))
 }
 
-// DefaultModpackClient is the default [ModpackClient].
-var DefaultModpackClient = NewModpackClient(http.DefaultClient)
+var (
+	// DefaultPublicModpackClient is the default public modpack client.
+	DefaultPublicModpackClient = NewPublicModpackClient(http.DefaultClient)
+
+	// DefaultCurseForgeModpackClient is the default CurseForge modpack client.
+	DefaultCurseForgeModpackClient = NewCurseForgeModpackClient(http.DefaultClient)
+)
 
 // GetPublicModpackManifest gets the manifest of a public modpack with the given ID.
 func GetPublicModpackManifest(ctx context.Context, modpackID int64) (ModpackManifest, error) {
-	return DefaultModpackClient.GetPublicModpackManifest(ctx, modpackID)
+	return DefaultPublicModpackClient.GetModpackManifest(ctx, modpackID)
 }
 
-// GetPublicModpackVersionManifest gets the manifest of a public modpack version with the given modpack and version IDs.
+// GetPublicModpackVersionManifest gets the manifest of a public modpack version with the given modpack ID and version ID.
 func GetPublicModpackVersionManifest(ctx context.Context, modpackID, versionID int64) (ModpackVersionManifest, error) {
-	return DefaultModpackClient.GetPublicModpackVersionManifest(ctx, modpackID, versionID)
+	return DefaultPublicModpackClient.GetModpackVersionManifest(ctx, modpackID, versionID)
 }
 
 // GetCurseForgeModpackManifest gets the manifest of a CurseForge modpack with the given ID.
 func GetCurseForgeModpackManifest(ctx context.Context, modpackID int64) (ModpackManifest, error) {
-	return DefaultModpackClient.GetCurseForgeModpackManifest(ctx, modpackID)
+	return DefaultCurseForgeModpackClient.GetModpackManifest(ctx, modpackID)
 }
 
-// GetCurseForgeModpackVersionManifest gets the manifest of a CurseForge modpack version with the given modpack and version IDs.
+// GetCurseForgeModpackVersionManifest gets the manifest of a CurseForge modpack version with the given modpack ID and version ID.
 func GetCurseForgeModpackVersionManifest(ctx context.Context, modpackID, versionID int64) (ModpackVersionManifest, error) {
-	return DefaultModpackClient.GetCurseForgeModpackVersionManifest(ctx, modpackID, versionID)
+	return DefaultCurseForgeModpackClient.GetModpackVersionManifest(ctx, modpackID, versionID)
 }
 
 // doGetRequest sends a GET request to the given URL and returns the response unmarshaled from JSON.

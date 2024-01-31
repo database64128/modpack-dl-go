@@ -66,15 +66,14 @@ func main() {
 		cancel()
 	}()
 
-	var (
-		modpackManifest modpacksch.ModpackManifest
-		err             error
-	)
+	var client modpacksch.ModpackClient
 	if !curseforge {
-		modpackManifest, err = modpacksch.GetPublicModpackManifest(ctx, modpackID)
+		client = modpacksch.DefaultPublicModpackClient
 	} else {
-		modpackManifest, err = modpacksch.GetCurseForgeModpackManifest(ctx, modpackID)
+		client = modpacksch.DefaultCurseForgeModpackClient
 	}
+
+	modpackManifest, err := client.GetModpackManifest(ctx, modpackID)
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelError, "Failed to get modpack manifest",
 			slog.Int64("modpackID", modpackID),
@@ -99,12 +98,7 @@ func main() {
 		versionID = version.ID
 	}
 
-	var versionManifest modpacksch.ModpackVersionManifest
-	if !curseforge {
-		versionManifest, err = modpacksch.GetPublicModpackVersionManifest(ctx, modpackID, versionID)
-	} else {
-		versionManifest, err = modpacksch.GetCurseForgeModpackVersionManifest(ctx, modpackID, versionID)
-	}
+	versionManifest, err := client.GetModpackVersionManifest(ctx, modpackID, versionID)
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelError, "Failed to get modpack version manifest",
 			slog.Int64("modpackID", modpackID),
