@@ -145,7 +145,7 @@ func (j *Job) createAndCheckFile(path string) (*os.File, bool, error) {
 }
 
 // sendDownloadJob sends a download job to the download job channel.
-func (j *Job) sendDownloadJob(ctx context.Context, logger *slog.Logger, djch chan<- download.Job, f1, f2 *os.File) {
+func (j *Job) sendDownloadJob(djch chan<- download.Job, f1, f2 *os.File) {
 	djch <- download.Job{
 		DownloadURL:         j.DownloadURL,
 		UserAgent:           j.UserAgent,
@@ -173,7 +173,7 @@ func (j *Job) runWithoutSecondaryDestinationPath(ctx context.Context, logger *sl
 	}
 
 	if j.MigrateFromPath == "" {
-		j.sendDownloadJob(ctx, logger, djch, dst, nil)
+		j.sendDownloadJob(djch, dst, nil)
 		return
 	}
 
@@ -187,7 +187,7 @@ func (j *Job) runWithoutSecondaryDestinationPath(ctx context.Context, logger *sl
 		return
 	}
 	if !ok {
-		j.sendDownloadJob(ctx, logger, djch, dst, nil)
+		j.sendDownloadJob(djch, dst, nil)
 		src.Close()
 		return
 	}
@@ -330,7 +330,7 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 	// Neither file exists or is valid.
 	// Check if the migration source exists.
 	if j.MigrateFromPath == "" {
-		j.sendDownloadJob(ctx, logger, djch, f1, f2)
+		j.sendDownloadJob(djch, f1, f2)
 		return
 	}
 
@@ -345,7 +345,7 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 		return
 	}
 	if !ok3 {
-		j.sendDownloadJob(ctx, logger, djch, f1, f2)
+		j.sendDownloadJob(djch, f1, f2)
 		f3.Close()
 		return
 	}
