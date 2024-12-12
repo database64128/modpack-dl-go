@@ -56,14 +56,12 @@ func main() {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel}))
-	ctx, cancel := context.WithCancel(context.Background())
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		sig := <-sigCh
-		logger.LogAttrs(ctx, slog.LevelInfo, "Received exit signal", slog.Any("signal", sig))
-		cancel()
+		<-ctx.Done()
+		logger.LogAttrs(ctx, slog.LevelInfo, "Received exit signal")
+		stop()
 	}()
 
 	var client modpacksch.ModpackClient
