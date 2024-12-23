@@ -18,6 +18,7 @@ import (
 	"github.com/database64128/modpack-dl-go/download"
 	"github.com/database64128/modpack-dl-go/modpacksch"
 	"github.com/database64128/modpack-dl-go/precheck"
+	"github.com/lmittmann/tint"
 )
 
 var (
@@ -61,7 +62,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel}))
+	logger := slog.New(tint.NewHandler(os.Stderr, &tint.Options{
+		Level: logLevel,
+	}))
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	go func() {
