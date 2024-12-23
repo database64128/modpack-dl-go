@@ -1,6 +1,6 @@
 # Minecraft Modpack Downloader
 
-[![Build](https://github.com/database64128/modpack-dl-go/actions/workflows/build.yml/badge.svg)](https://github.com/database64128/modpack-dl-go/actions/workflows/build.yml)
+[![Test](https://github.com/database64128/modpack-dl-go/actions/workflows/test.yml/badge.svg)](https://github.com/database64128/modpack-dl-go/actions/workflows/test.yml)
 [![Release](https://github.com/database64128/modpack-dl-go/actions/workflows/release.yml/badge.svg)](https://github.com/database64128/modpack-dl-go/actions/workflows/release.yml)
 [![AUR version](https://img.shields.io/aur/version/modpack-dl-go-git?label=modpack-dl-go-git)](https://aur.archlinux.org/packages/modpack-dl-go-git)
 
