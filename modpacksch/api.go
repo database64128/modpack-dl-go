@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"time"
 
@@ -301,6 +302,7 @@ type ModpackVersionFile struct {
 // PrecheckJob returns a precheck job for the file.
 func (f *ModpackVersionFile) PrecheckJob(
 	migrateFromPath, clientPath, serverPath string,
+	serverIgnoreCurseForgeProjects []int64,
 	preserveMigrationSource bool,
 ) (precheck.Job, bool, error) {
 	if !filepath.IsLocal(f.Path) {
@@ -319,7 +321,7 @@ func (f *ModpackVersionFile) PrecheckJob(
 	if !f.ServerOnly && clientPath != "" {
 		destinationPath = filepath.Join(clientPath, f.Path, f.Name)
 	}
-	if !f.ClientOnly && serverPath != "" {
+	if !f.ClientOnly && serverPath != "" && (f.CurseForge == nil || !slices.Contains(serverIgnoreCurseForgeProjects, f.CurseForge.Project)) {
 		secondaryDestinationPath = filepath.Join(serverPath, f.Path, f.Name)
 	}
 

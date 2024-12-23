@@ -8,8 +8,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/database64128/modpack-dl-go/download"
 	"github.com/database64128/modpack-dl-go/modpacksch"
@@ -17,15 +21,16 @@ import (
 )
 
 var (
-	modpackID               int64
-	versionID               int64
-	clientPath              string
-	serverPath              string
-	migrateFromPath         string
-	preserveMigrationSource bool
-	curseforge              bool
-	downloadConcurrency     int
-	logLevel                slog.Level
+	modpackID                      int64
+	versionID                      int64
+	clientPath                     string
+	serverPath                     string
+	migrateFromPath                string
+	preserveMigrationSource        bool
+	curseforge                     bool
+	downloadConcurrency            int
+	serverIgnoreCurseForgeProjects int64s
+	logLevel                       slog.Level
 )
 
 func init() {
@@ -37,6 +42,7 @@ func init() {
 	flag.BoolVar(&preserveMigrationSource, "preserveMigrationSource", false, "Migrate by copying instead of moving files")
 	flag.BoolVar(&curseforge, "curseforge", false, "ID is a CurseForge project ID instead of a modpacks.ch public modpack ID")
 	flag.IntVar(&downloadConcurrency, "downloadConcurrency", 32, "Optional. Number of concurrent downloads")
+	flag.Var(&serverIgnoreCurseForgeProjects, "serverIgnoreCurseForgeProjects", "Optional. Comma-separated list of CurseForge project IDs to ignore when downloading the server")
 	flag.TextVar(&logLevel, "logLevel", slog.LevelInfo, "Log level")
 }
 
@@ -127,7 +133,7 @@ func main() {
 
 	for i := range versionManifest.Files {
 		file := &versionManifest.Files[i]
-		pj, ok, err := file.PrecheckJob(migrateFromPath, clientPath, serverPath, preserveMigrationSource)
+		pj, ok, err := file.PrecheckJob(migrateFromPath, clientPath, serverPath, serverIgnoreCurseForgeProjects, preserveMigrationSource)
 		if err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to create precheck job",
 				slog.Int64("modpackID", versionManifest.Parent),
@@ -147,4 +153,50 @@ func main() {
 	close(pjch)
 	pwf.Wait()
 	dwf.Wait()
+}
+
+// int64s implements [flag.Value].
+type int64s []int64
+
+// String returns the int64s as a comma-separated list.
+func (i int64s) String() string {
+	if len(i) == 0 {
+		return ""
+	}
+	// Currently, a CurseForge project ID is up to 7 digits long.
+	b := make([]byte, 0, 8*len(i)-1)
+	b = strconv.AppendInt(b, i[0], 10)
+	for _, n := range i[1:] {
+		b = append(b, ',')
+		b = strconv.AppendInt(b, n, 10)
+	}
+	return unsafe.String(unsafe.SliceData(b), len(b))
+}
+
+// Set parses value as a comma-separated list of int64s.
+func (i *int64s) Set(value string) error {
+	dst := slices.Grow(*i, strings.Count(value, ",")+1)
+
+	for {
+		var (
+			s     string
+			found bool
+		)
+
+		s, value, found = strings.Cut(value, ",")
+		if s != "" {
+			n, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			dst = append(dst, n)
+		}
+
+		if !found {
+			break
+		}
+	}
+
+	*i = dst
+	return nil
 }
