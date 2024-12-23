@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 	"unsafe"
 
 	"github.com/database64128/modpack-dl-go/download"
@@ -84,7 +83,7 @@ func main() {
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelError, "Failed to get modpack manifest",
 			slog.Int64("modpackID", modpackID),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 		os.Exit(1)
 	}
@@ -110,7 +109,7 @@ func main() {
 		logger.LogAttrs(ctx, slog.LevelError, "Failed to get modpack version manifest",
 			slog.Int64("modpackID", modpackID),
 			slog.Int64("versionID", versionID),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 		os.Exit(1)
 	}
@@ -120,7 +119,7 @@ func main() {
 		slog.Int64("versionID", versionManifest.ID),
 		slog.String("name", versionManifest.Name),
 		slog.String("type", versionManifest.Type),
-		slog.Time("updated", time.Time(versionManifest.Updated)),
+		slog.Time("updated", versionManifest.Updated.Time),
 		slog.Int("fileCount", len(versionManifest.Files)),
 		slog.Any("targets", versionManifest.Targets),
 	)
@@ -143,7 +142,7 @@ func main() {
 				slog.Int64("versionID", versionManifest.ID),
 				slog.String("name", file.Name),
 				slog.String("path", file.Path),
-				slog.Any("error", err),
+				tint.Err(err),
 			)
 			continue
 		}
@@ -187,7 +186,7 @@ func (i *int64s) Set(value string) error {
 		)
 
 		s, value, found = strings.Cut(value, ",")
-		if s != "" {
+		if s = strings.TrimSpace(s); s != "" {
 			n, err := strconv.ParseInt(s, 10, 64)
 			if err != nil {
 				return err

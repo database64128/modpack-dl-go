@@ -8,6 +8,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/lmittmann/tint"
 )
 
 // Job is a download job.
@@ -40,7 +42,7 @@ func mtimeFromResponse(ctx context.Context, logger *slog.Logger, resp *http.Resp
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to parse Last-Modified header",
 			slog.String("Last-Modified", lastModified[0]),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 		return time.Time{}
 	}
@@ -67,7 +69,7 @@ func (j *Job) run(ctx context.Context, logger *slog.Logger, client *http.Client)
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to create request",
 			slog.String("name", j.TargetFile.Name()),
 			slog.String("url", j.DownloadURL),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 		return
 	}
@@ -81,7 +83,7 @@ func (j *Job) run(ctx context.Context, logger *slog.Logger, client *http.Client)
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to send request",
 			slog.String("name", j.TargetFile.Name()),
 			slog.String("url", j.DownloadURL),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 		return
 	}
@@ -100,7 +102,7 @@ func (j *Job) run(ctx context.Context, logger *slog.Logger, client *http.Client)
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to download file",
 			slog.String("name", j.TargetFile.Name()),
 			slog.String("url", j.DownloadURL),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 		return
 	}
@@ -114,7 +116,7 @@ func (j *Job) run(ctx context.Context, logger *slog.Logger, client *http.Client)
 		if _, err = j.TargetFile.Seek(0, io.SeekStart); err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to seek to start of file",
 				slog.String("name", j.TargetFile.Name()),
-				slog.Any("error", err),
+				tint.Err(err),
 			)
 			return
 		}
@@ -123,7 +125,7 @@ func (j *Job) run(ctx context.Context, logger *slog.Logger, client *http.Client)
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to copy file",
 				slog.String("src", j.TargetFile.Name()),
 				slog.String("dst", j.SecondaryTargetFile.Name()),
-				slog.Any("error", err),
+				tint.Err(err),
 			)
 			return
 		}
@@ -147,7 +149,7 @@ func (j *Job) Run(ctx context.Context, logger *slog.Logger, client *http.Client)
 	if err := os.Chtimes(j.TargetFile.Name(), mtime, mtime); err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to set modification time",
 			slog.String("name", j.TargetFile.Name()),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 		return
 	}
@@ -156,7 +158,7 @@ func (j *Job) Run(ctx context.Context, logger *slog.Logger, client *http.Client)
 		if err := os.Chtimes(j.SecondaryTargetFile.Name(), mtime, mtime); err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to set modification time",
 				slog.String("name", j.SecondaryTargetFile.Name()),
-				slog.Any("error", err),
+				tint.Err(err),
 			)
 			return
 		}

@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/database64128/modpack-dl-go/download"
+	"github.com/lmittmann/tint"
 )
 
 // Job is a precheck job.
@@ -160,7 +161,7 @@ func (j *Job) runWithoutSecondaryDestinationPath(ctx context.Context, logger *sl
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to check file at destination path",
 			slog.String("path", j.DestinationPath),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 		return
 	}
@@ -181,7 +182,7 @@ func (j *Job) runWithoutSecondaryDestinationPath(ctx context.Context, logger *sl
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to check file at migration source path",
 			slog.String("path", j.MigrateFromPath),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 		dst.Close()
 		return
@@ -208,7 +209,7 @@ func (j *Job) runWithoutSecondaryDestinationPath(ctx context.Context, logger *sl
 		logger.LogAttrs(ctx, slog.LevelDebug, "Rename failed, falling back to copy & remove",
 			slog.String("src", j.MigrateFromPath),
 			slog.String("dst", j.DestinationPath),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 
 		// Open the files again to fall back to copy & remove.
@@ -216,7 +217,7 @@ func (j *Job) runWithoutSecondaryDestinationPath(ctx context.Context, logger *sl
 		if err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to open file at destination path",
 				slog.String("path", j.DestinationPath),
-				slog.Any("error", err),
+				tint.Err(err),
 			)
 			return
 		}
@@ -225,7 +226,7 @@ func (j *Job) runWithoutSecondaryDestinationPath(ctx context.Context, logger *sl
 		if err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to open file at migration source path",
 				slog.String("path", j.MigrateFromPath),
-				slog.Any("error", err),
+				tint.Err(err),
 			)
 			dst.Close()
 			return
@@ -236,7 +237,7 @@ func (j *Job) runWithoutSecondaryDestinationPath(ctx context.Context, logger *sl
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to copy file",
 			slog.String("src", src.Name()),
 			slog.String("dst", dst.Name()),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 		src.Close()
 		dst.Close()
@@ -258,7 +259,7 @@ func (j *Job) runWithoutSecondaryDestinationPath(ctx context.Context, logger *sl
 	if err = os.Remove(j.MigrateFromPath); err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to remove migration source file",
 			slog.String("path", j.MigrateFromPath),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 		return
 	}
@@ -272,7 +273,7 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to check file at destination path",
 			slog.String("path", j.DestinationPath),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 		return
 	}
@@ -281,7 +282,7 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to check file at secondary destination path",
 			slog.String("path", j.SecondaryDestinationPath),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 		f1.Close()
 		return
@@ -313,7 +314,7 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to copy file",
 				slog.String("src", src.Name()),
 				slog.String("dst", dst.Name()),
-				slog.Any("error", err),
+				tint.Err(err),
 			)
 		}
 
@@ -338,7 +339,7 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to check file at migration source path",
 			slog.String("path", j.MigrateFromPath),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 		f1.Close()
 		f2.Close()
@@ -357,7 +358,7 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to copy file",
 			slog.String("src", f3.Name()),
 			slog.String("dst", f1.Name()),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 		hasCopyError = true
 	} else {
@@ -385,7 +386,7 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 		logger.LogAttrs(ctx, slog.LevelDebug, "Rename failed, falling back to copy & remove",
 			slog.String("src", j.MigrateFromPath),
 			slog.String("dst", j.SecondaryDestinationPath),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 
 		// Open the files again to fall back to copy & remove.
@@ -393,7 +394,7 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 		if err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to open file at secondary destination path",
 				slog.String("path", j.SecondaryDestinationPath),
-				slog.Any("error", err),
+				tint.Err(err),
 			)
 			return
 		}
@@ -402,7 +403,7 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 		if err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to open file at migration source path",
 				slog.String("path", j.MigrateFromPath),
-				slog.Any("error", err),
+				tint.Err(err),
 			)
 			f2.Close()
 			return
@@ -411,7 +412,7 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 		if _, err = f3.Seek(0, io.SeekStart); err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to seek to start of file",
 				slog.String("path", f3.Name()),
-				slog.Any("error", err),
+				tint.Err(err),
 			)
 			f2.Close()
 			f3.Close()
@@ -423,7 +424,7 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to copy file",
 			slog.String("src", f3.Name()),
 			slog.String("dst", f2.Name()),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 		hasCopyError = true
 	} else {
@@ -443,7 +444,7 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 	if err = os.Remove(j.MigrateFromPath); err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to remove migration source file",
 			slog.String("path", j.MigrateFromPath),
-			slog.Any("error", err),
+			tint.Err(err),
 		)
 		return
 	}

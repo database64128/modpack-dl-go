@@ -376,12 +376,14 @@ type ResourceBase struct {
 	Updated Time   `json:"updated"`
 }
 
-// Time marshals into and unmarshals from a Unix timestamp in seconds.
-type Time time.Time
+// Time is [time.Time] but uses Unix timestamps in seconds for its representation in JSON.
+type Time struct {
+	time.Time
+}
 
 // MarshalJSON implements [json.Marshaler].
 func (t Time) MarshalJSON() ([]byte, error) {
-	return strconv.AppendInt(nil, time.Time(t).Unix(), 10), nil
+	return strconv.AppendInt(nil, t.Time.Unix(), 10), nil
 }
 
 // UnmarshalJSON implements [json.Unmarshaler].
@@ -390,6 +392,6 @@ func (t *Time) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse Unix timestamp: %w", err)
 	}
-	*t = Time(time.Unix(secs, 0))
+	t.Time = time.Unix(secs, 0)
 	return nil
 }
