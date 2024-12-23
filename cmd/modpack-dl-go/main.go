@@ -113,6 +113,7 @@ func main() {
 		slog.String("type", versionManifest.Type),
 		slog.Time("updated", time.Time(versionManifest.Updated)),
 		slog.Int("fileCount", len(versionManifest.Files)),
+		slog.Any("targets", versionManifest.Targets),
 	)
 
 	if clientPath == "" && serverPath == "" {
