@@ -59,8 +59,15 @@ type Job struct {
 func createFile(root *os.Root, path string) (*os.File, error) {
 	f, err := root.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		if err = root.MkdirAll(filepath.Dir(path), 0755); err != nil {
-			return nil, err
+		// Work around https://github.com/golang/go/issues/75114.
+		for {
+			if err = root.MkdirAll(filepath.Dir(path), 0755); err != nil {
+				if errors.Is(err, os.ErrExist) {
+					continue
+				}
+				return nil, err
+			}
+			break
 		}
 		return root.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
 	}
