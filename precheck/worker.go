@@ -21,10 +21,10 @@ import (
 // A precheck job short-circuits the download process if any of the following
 // conditions are met:
 //
-//   - The target file already exists at DestinationPath or SecondaryDestinationPath.
+//   - The target file already exists at one of the destination paths.
 //     In this case, the file is copied to the other path if it's not already there.
-//   - The target file already exists at MigrateFromPath. In this case, the file is
-//     moved/copied to DestinationPath and copied to SecondaryDestinationPath.
+//   - The target file already exists at the migration source path.
+//     In this case, the file is moved/copied to the destination paths.
 type Job struct {
 	// DownloadURL is the target file's download URL.
 	DownloadURL string
@@ -33,21 +33,15 @@ type Job struct {
 	// If empty, Go's default behavior is preserved.
 	UserAgent string
 
-	// MigrateFromPath is the path to a possible existing file.
-	// The path may be empty. The file may not exist or may have different content.
-	MigrateFromPath string
-
-	// PreserveMigrationSource controls whether to preserve the file at
-	// MigrateFromPath should a migration happen.
-	PreserveMigrationSource bool
-
 	// DestinationPath is the destination path for downloading the file
 	// or migrating an existing file to.
 	DestinationPath string
 
-	// SecondaryDestinationPath specifies where to put a copy of the file.
-	// If empty, no copy is made.
-	SecondaryDestinationPath string
+	// IsClientFile indicates whether the file should be included in the modpack client.
+	IsClientFile bool
+
+	// IsServerFile indicates whether the file should be included in the modpack server.
+	IsServerFile bool
 
 	// NewHash is the function that returns a [hash.Hash] for verifying the file content.
 	NewHash func() hash.Hash
@@ -62,13 +56,13 @@ type Job struct {
 // createFile creates the file at the given path.
 // The parent directory will be created if it doesn't exist.
 // It returns the opened created file or an error.
-func createFile(path string) (*os.File, error) {
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
+func createFile(root *os.Root, path string) (*os.File, error) {
+	f, err := root.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		if err = os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		if err = root.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return nil, err
 		}
-		return os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
+		return root.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
 	}
 	return f, nil
 }
@@ -112,8 +106,8 @@ func (j *Job) checkFile(f *os.File) (bool, error) {
 
 // openAndCheckFile opens the file at the given path for reading and checks it.
 // It returns the opened checked file, whether the check succeeded, or an error.
-func (j *Job) openAndCheckFile(path string) (*os.File, bool, error) {
-	f, err := os.Open(path)
+func (j *Job) openAndCheckFile(root *os.Root, path string) (*os.File, bool, error) {
+	f, err := root.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, false, nil
@@ -131,8 +125,8 @@ func (j *Job) openAndCheckFile(path string) (*os.File, bool, error) {
 
 // createAndCheckFile creates and then checks the file at the given path.
 // It returns the opened checked file, whether the check succeeded, or an error.
-func (j *Job) createAndCheckFile(path string) (*os.File, bool, error) {
-	f, err := createFile(path)
+func (j *Job) createAndCheckFile(root *os.Root, path string) (*os.File, bool, error) {
+	f, err := createFile(root, path)
 	if err != nil {
 		return nil, false, err
 	}
@@ -155,11 +149,19 @@ func (j *Job) sendDownloadJob(djch chan<- download.Job, f1, f2 *os.File) {
 	}
 }
 
-// runWithoutSecondaryDestinationPath runs the job when SecondaryDestinationPath is empty.
-func (j *Job) runWithoutSecondaryDestinationPath(ctx context.Context, logger *slog.Logger, djch chan<- download.Job) {
-	dst, ok, err := j.createAndCheckFile(j.DestinationPath)
+// runOneDestination runs the job with a single destination.
+func (j *Job) runOneDestination(
+	ctx context.Context,
+	logger *slog.Logger,
+	djch chan<- download.Job,
+	destinationRoot *os.Root,
+	migrateFromRoot *os.Root,
+	preserveMigrationSource bool,
+) {
+	dst, ok, err := j.createAndCheckFile(destinationRoot, j.DestinationPath)
 	if err != nil {
-		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to check file at destination path",
+		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to create or check file at destination path",
+			slog.String("root", destinationRoot.Name()),
 			slog.String("path", j.DestinationPath),
 			tint.Err(err),
 		)
@@ -167,21 +169,23 @@ func (j *Job) runWithoutSecondaryDestinationPath(ctx context.Context, logger *sl
 	}
 	if ok {
 		logger.LogAttrs(ctx, slog.LevelInfo, "Skipping existing file",
+			slog.String("root", destinationRoot.Name()),
 			slog.String("path", j.DestinationPath),
 		)
 		dst.Close()
 		return
 	}
 
-	if j.MigrateFromPath == "" {
+	if migrateFromRoot == nil {
 		j.sendDownloadJob(djch, dst, nil)
 		return
 	}
 
-	src, ok, err := j.openAndCheckFile(j.MigrateFromPath)
+	src, ok, err := j.openAndCheckFile(migrateFromRoot, j.DestinationPath)
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to check file at migration source path",
-			slog.String("path", j.MigrateFromPath),
+			slog.String("root", migrateFromRoot.Name()),
+			slog.String("path", j.DestinationPath),
 			tint.Err(err),
 		)
 		dst.Close()
@@ -193,39 +197,42 @@ func (j *Job) runWithoutSecondaryDestinationPath(ctx context.Context, logger *sl
 		return
 	}
 
-	if !j.PreserveMigrationSource {
+	srcName := src.Name()
+	dstName := dst.Name()
+
+	if !preserveMigrationSource {
 		// First close the files and attempt a rename.
 		src.Close()
 		dst.Close()
 
-		if err = os.Rename(j.MigrateFromPath, j.DestinationPath); err == nil {
+		if err = os.Rename(srcName, dstName); err == nil {
 			logger.LogAttrs(ctx, slog.LevelInfo, "Moved existing file",
-				slog.String("src", j.MigrateFromPath),
-				slog.String("dst", j.DestinationPath),
+				slog.String("src", srcName),
+				slog.String("dst", dstName),
 			)
 			return
 		}
 
 		logger.LogAttrs(ctx, slog.LevelDebug, "Rename failed, falling back to copy & remove",
-			slog.String("src", j.MigrateFromPath),
-			slog.String("dst", j.DestinationPath),
+			slog.String("src", srcName),
+			slog.String("dst", dstName),
 			tint.Err(err),
 		)
 
 		// Open the files again to fall back to copy & remove.
-		dst, err = os.OpenFile(j.DestinationPath, os.O_RDWR, 0644)
+		dst, err = os.OpenFile(dstName, os.O_RDWR, 0644)
 		if err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to open file at destination path",
-				slog.String("path", j.DestinationPath),
+				slog.String("path", dstName),
 				tint.Err(err),
 			)
 			return
 		}
 
-		src, err = os.Open(j.MigrateFromPath)
+		src, err = os.Open(srcName)
 		if err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to open file at migration source path",
-				slog.String("path", j.MigrateFromPath),
+				slog.String("path", srcName),
 				tint.Err(err),
 			)
 			dst.Close()
@@ -235,8 +242,8 @@ func (j *Job) runWithoutSecondaryDestinationPath(ctx context.Context, logger *sl
 
 	if _, err = dst.ReadFrom(src); err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to copy file",
-			slog.String("src", src.Name()),
-			slog.String("dst", dst.Name()),
+			slog.String("src", srcName),
+			slog.String("dst", dstName),
 			tint.Err(err),
 		)
 		src.Close()
@@ -248,54 +255,65 @@ func (j *Job) runWithoutSecondaryDestinationPath(ctx context.Context, logger *sl
 	dst.Close()
 
 	logger.LogAttrs(ctx, slog.LevelInfo, "Copied existing file",
-		slog.String("src", src.Name()),
-		slog.String("dst", dst.Name()),
+		slog.String("src", srcName),
+		slog.String("dst", dstName),
 	)
 
-	if j.PreserveMigrationSource {
+	if preserveMigrationSource {
 		return
 	}
 
-	if err = os.Remove(j.MigrateFromPath); err != nil {
+	if err = os.Remove(srcName); err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to remove migration source file",
-			slog.String("path", j.MigrateFromPath),
+			slog.String("path", srcName),
 			tint.Err(err),
 		)
 		return
 	}
 
-	logger.LogAttrs(ctx, slog.LevelInfo, "Removed migration source file", slog.String("path", j.MigrateFromPath))
+	logger.LogAttrs(ctx, slog.LevelInfo, "Removed migration source file", slog.String("path", srcName))
 }
 
-// runWithSecondaryDestinationPath runs the job when SecondaryDestinationPath is not empty.
-func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.Logger, djch chan<- download.Job) {
-	f1, ok1, err := j.createAndCheckFile(j.DestinationPath)
+// runTwoDestinations runs the job with two destinations.
+func (j *Job) runTwoDestinations(
+	ctx context.Context,
+	logger *slog.Logger,
+	djch chan<- download.Job,
+	destinationRoot *os.Root,
+	secondaryDestinationRoot *os.Root,
+	migrateFromRoot *os.Root,
+	preserveMigrationSource bool,
+) {
+	dst1, ok1, err := j.createAndCheckFile(destinationRoot, j.DestinationPath)
 	if err != nil {
-		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to check file at destination path",
+		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to create or check file at destination path",
+			slog.String("root", destinationRoot.Name()),
 			slog.String("path", j.DestinationPath),
 			tint.Err(err),
 		)
 		return
 	}
 
-	f2, ok2, err := j.createAndCheckFile(j.SecondaryDestinationPath)
+	dst2, ok2, err := j.createAndCheckFile(secondaryDestinationRoot, j.DestinationPath)
 	if err != nil {
-		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to check file at secondary destination path",
-			slog.String("path", j.SecondaryDestinationPath),
+		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to create or check file at secondary destination path",
+			slog.String("root", secondaryDestinationRoot.Name()),
+			slog.String("path", j.DestinationPath),
 			tint.Err(err),
 		)
-		f1.Close()
+		dst1.Close()
 		return
 	}
 
 	// Both files exist and are valid.
 	if ok1 && ok2 {
 		logger.LogAttrs(ctx, slog.LevelInfo, "Skipping existing files",
+			slog.String("root", destinationRoot.Name()),
+			slog.String("secondaryRoot", secondaryDestinationRoot.Name()),
 			slog.String("path", j.DestinationPath),
-			slog.String("secondaryPath", j.SecondaryDestinationPath),
 		)
-		f1.Close()
-		f2.Close()
+		dst1.Close()
+		dst2.Close()
 		return
 	}
 
@@ -303,11 +321,11 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 	if ok1 || ok2 {
 		var src, dst *os.File
 		if ok1 {
-			src = f1
-			dst = f2
+			src = dst1
+			dst = dst2
 		} else {
-			src = f2
-			dst = f1
+			src = dst2
+			dst = dst1
 		}
 
 		if _, err = dst.ReadFrom(src); err != nil {
@@ -330,134 +348,149 @@ func (j *Job) runWithSecondaryDestinationPath(ctx context.Context, logger *slog.
 
 	// Neither file exists or is valid.
 	// Check if the migration source exists.
-	if j.MigrateFromPath == "" {
-		j.sendDownloadJob(djch, f1, f2)
+	if migrateFromRoot == nil {
+		j.sendDownloadJob(djch, dst1, dst2)
 		return
 	}
 
-	f3, ok3, err := j.openAndCheckFile(j.MigrateFromPath)
+	src, srcOK, err := j.openAndCheckFile(migrateFromRoot, j.DestinationPath)
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to check file at migration source path",
-			slog.String("path", j.MigrateFromPath),
+			slog.String("root", migrateFromRoot.Name()),
+			slog.String("path", j.DestinationPath),
 			tint.Err(err),
 		)
-		f1.Close()
-		f2.Close()
+		dst1.Close()
+		dst2.Close()
 		return
 	}
-	if !ok3 {
-		j.sendDownloadJob(djch, f1, f2)
-		f3.Close()
+	if !srcOK {
+		j.sendDownloadJob(djch, dst1, dst2)
+		src.Close()
 		return
 	}
 
 	// The migration source exists and is valid.
+	dst1Name := dst1.Name()
+	dst2Name := dst2.Name()
+	srcName := src.Name()
 
 	var hasCopyError bool
-	if _, err = f1.ReadFrom(f3); err != nil {
+	if _, err = dst1.ReadFrom(src); err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to copy file",
-			slog.String("src", f3.Name()),
-			slog.String("dst", f1.Name()),
+			slog.String("src", srcName),
+			slog.String("dst", dst1Name),
 			tint.Err(err),
 		)
 		hasCopyError = true
 	} else {
 		logger.LogAttrs(ctx, slog.LevelInfo, "Copied existing file",
-			slog.String("src", f3.Name()),
-			slog.String("dst", f1.Name()),
+			slog.String("src", srcName),
+			slog.String("dst", dst1Name),
 		)
 	}
 
-	f1.Close()
+	dst1.Close()
 
-	if !j.PreserveMigrationSource {
+	if !preserveMigrationSource {
 		// First close the files and attempt a rename.
-		f2.Close()
-		f3.Close()
+		dst2.Close()
+		src.Close()
 
-		if err = os.Rename(j.MigrateFromPath, j.SecondaryDestinationPath); err == nil {
+		if err = os.Rename(srcName, dst2Name); err == nil {
 			logger.LogAttrs(ctx, slog.LevelInfo, "Moved existing file",
-				slog.String("src", j.MigrateFromPath),
-				slog.String("dst", j.SecondaryDestinationPath),
+				slog.String("src", srcName),
+				slog.String("dst", dst2Name),
 			)
 			return
 		}
 
 		logger.LogAttrs(ctx, slog.LevelDebug, "Rename failed, falling back to copy & remove",
-			slog.String("src", j.MigrateFromPath),
-			slog.String("dst", j.SecondaryDestinationPath),
+			slog.String("src", srcName),
+			slog.String("dst", dst2Name),
 			tint.Err(err),
 		)
 
 		// Open the files again to fall back to copy & remove.
-		f2, err = os.OpenFile(j.SecondaryDestinationPath, os.O_RDWR, 0644)
+		dst2, err = os.OpenFile(dst2Name, os.O_RDWR, 0644)
 		if err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to open file at secondary destination path",
-				slog.String("path", j.SecondaryDestinationPath),
+				slog.String("path", dst2Name),
 				tint.Err(err),
 			)
 			return
 		}
 
-		f3, err = os.Open(j.MigrateFromPath)
+		src, err = os.Open(srcName)
 		if err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to open file at migration source path",
-				slog.String("path", j.MigrateFromPath),
+				slog.String("path", srcName),
 				tint.Err(err),
 			)
-			f2.Close()
+			dst2.Close()
 			return
 		}
 	} else {
-		if _, err = f3.Seek(0, io.SeekStart); err != nil {
+		if _, err = src.Seek(0, io.SeekStart); err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to seek to start of file",
-				slog.String("path", f3.Name()),
+				slog.String("path", srcName),
 				tint.Err(err),
 			)
-			f2.Close()
-			f3.Close()
+			dst2.Close()
+			src.Close()
 			return
 		}
 	}
 
-	if _, err = f2.ReadFrom(f3); err != nil {
+	if _, err = dst2.ReadFrom(src); err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to copy file",
-			slog.String("src", f3.Name()),
-			slog.String("dst", f2.Name()),
+			slog.String("src", srcName),
+			slog.String("dst", dst2Name),
 			tint.Err(err),
 		)
 		hasCopyError = true
 	} else {
 		logger.LogAttrs(ctx, slog.LevelInfo, "Copied existing file",
-			slog.String("src", f3.Name()),
-			slog.String("dst", f2.Name()),
+			slog.String("src", srcName),
+			slog.String("dst", dst2Name),
 		)
 	}
 
-	f2.Close()
-	f3.Close()
+	dst2.Close()
+	src.Close()
 
-	if hasCopyError || j.PreserveMigrationSource {
+	if hasCopyError || preserveMigrationSource {
 		return
 	}
 
-	if err = os.Remove(j.MigrateFromPath); err != nil {
+	if err = os.Remove(srcName); err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to remove migration source file",
-			slog.String("path", j.MigrateFromPath),
+			slog.String("path", srcName),
 			tint.Err(err),
 		)
 		return
 	}
 
-	logger.LogAttrs(ctx, slog.LevelInfo, "Removed migration source file", slog.String("path", j.MigrateFromPath))
+	logger.LogAttrs(ctx, slog.LevelInfo, "Removed migration source file", slog.String("path", srcName))
 }
 
 // Run runs the job.
-func (j *Job) Run(ctx context.Context, logger *slog.Logger, djch chan<- download.Job) {
-	if j.SecondaryDestinationPath == "" {
-		j.runWithoutSecondaryDestinationPath(ctx, logger, djch)
-	} else {
-		j.runWithSecondaryDestinationPath(ctx, logger, djch)
+func (j *Job) Run(
+	ctx context.Context,
+	logger *slog.Logger,
+	djch chan<- download.Job,
+	clientRoot *os.Root,
+	serverRoot *os.Root,
+	migrateFromRoot *os.Root,
+	preserveMigrationSource bool,
+) {
+	switch {
+	case clientRoot != nil && serverRoot != nil && j.IsClientFile && j.IsServerFile:
+		j.runTwoDestinations(ctx, logger, djch, clientRoot, serverRoot, migrateFromRoot, preserveMigrationSource)
+	case clientRoot != nil && serverRoot == nil && j.IsClientFile:
+		j.runOneDestination(ctx, logger, djch, clientRoot, migrateFromRoot, preserveMigrationSource)
+	case clientRoot == nil && serverRoot != nil && j.IsServerFile:
+		j.runOneDestination(ctx, logger, djch, serverRoot, migrateFromRoot, preserveMigrationSource)
 	}
 }
 
@@ -475,13 +508,21 @@ type WorkerFleet struct {
 // After use, close the precheck job channel to stop the workers.
 // Call the Wait method to wait for all workers to finish, and it
 // will close the download job channel.
-func NewWorkerFleet(ctx context.Context, logger *slog.Logger, pjch <-chan Job) *WorkerFleet {
+func NewWorkerFleet(
+	ctx context.Context,
+	logger *slog.Logger,
+	pjch <-chan Job,
+	clientRoot *os.Root,
+	serverRoot *os.Root,
+	migrateFromRoot *os.Root,
+	preserveMigrationSource bool,
+) *WorkerFleet {
 	wf := WorkerFleet{
 		djch: make(chan download.Job),
 	}
 	ncpu := runtime.NumCPU()
 	wf.wg.Add(ncpu)
-	for i := 0; i < ncpu; i++ {
+	for range ncpu {
 		go func() {
 			defer wf.wg.Done()
 			done := ctx.Done()
@@ -490,7 +531,7 @@ func NewWorkerFleet(ctx context.Context, logger *slog.Logger, pjch <-chan Job) *
 				case <-done:
 					continue
 				default:
-					pj.Run(ctx, logger, wf.djch)
+					pj.Run(ctx, logger, wf.djch, clientRoot, serverRoot, migrateFromRoot, preserveMigrationSource)
 				}
 			}
 		}()

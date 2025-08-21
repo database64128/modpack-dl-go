@@ -72,6 +72,40 @@ func main() {
 		stop()
 	}()
 
+	var (
+		clientRoot      *os.Root
+		serverRoot      *os.Root
+		migrateFromRoot *os.Root
+		err             error
+	)
+
+	if clientPath != "" {
+		clientRoot, err = os.OpenRoot(clientPath)
+		if err != nil {
+			logger.LogAttrs(ctx, slog.LevelError, "Failed to open client path", tint.Err(err))
+			os.Exit(1)
+		}
+		defer clientRoot.Close()
+	}
+
+	if serverPath != "" {
+		serverRoot, err = os.OpenRoot(serverPath)
+		if err != nil {
+			logger.LogAttrs(ctx, slog.LevelError, "Failed to open server path", tint.Err(err))
+			os.Exit(1)
+		}
+		defer serverRoot.Close()
+	}
+
+	if migrateFromPath != "" {
+		migrateFromRoot, err = os.OpenRoot(migrateFromPath)
+		if err != nil {
+			logger.LogAttrs(ctx, slog.LevelError, "Failed to open migration source path", tint.Err(err))
+			os.Exit(1)
+		}
+		defer migrateFromRoot.Close()
+	}
+
 	var client modpacksch.ModpackClient
 	if !curseforge {
 		client = modpacksch.DefaultPublicModpackClient
@@ -124,19 +158,18 @@ func main() {
 		slog.Any("targets", versionManifest.Targets),
 	)
 
-	if clientPath == "" && serverPath == "" {
+	if clientRoot == nil && serverRoot == nil {
 		logger.LogAttrs(ctx, slog.LevelInfo, "User did not ask to download anything")
 		return
 	}
 
 	pjch := make(chan precheck.Job)
-	pwf := precheck.NewWorkerFleet(ctx, logger, pjch)
+	pwf := precheck.NewWorkerFleet(ctx, logger, pjch, clientRoot, serverRoot, migrateFromRoot, preserveMigrationSource)
 	dwf := download.NewWorkerFleet(ctx, logger, http.DefaultClient, downloadConcurrency, pwf.DownloadJobChannel())
 
 	for i := range versionManifest.Files {
 		file := &versionManifest.Files[i]
-		pj, ok, err := file.PrecheckJob(migrateFromPath, clientPath, serverPath, serverIgnoreCurseForgeProjects, preserveMigrationSource)
-		if err != nil {
+		if err := file.SendPrecheckJob(pjch, serverIgnoreCurseForgeProjects); err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to create precheck job",
 				slog.Int64("modpackID", versionManifest.Parent),
 				slog.Int64("versionID", versionManifest.ID),
@@ -146,10 +179,6 @@ func main() {
 			)
 			continue
 		}
-		if !ok {
-			continue
-		}
-		pjch <- pj
 	}
 
 	close(pjch)

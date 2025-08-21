@@ -37,8 +37,8 @@ const (
 )
 
 var (
-	ErrPathSanitization = errors.New("path rejected by sanitization")
-	ErrMissingURL       = errors.New("missing URL")
+	ErrMissingURL  = errors.New("missing URL")
+	ErrMissingPath = errors.New("missing path")
 )
 
 // ModpackClient is a modpack client for the modpacks.ch API.
@@ -299,60 +299,38 @@ type ModpackVersionFile struct {
 	CurseForge *CurseForgeFile `json:"curseforge,omitempty"`
 }
 
-// PrecheckJob returns a precheck job for the file.
-func (f *ModpackVersionFile) PrecheckJob(
-	migrateFromPath, clientPath, serverPath string,
-	serverIgnoreCurseForgeProjects []int64,
-	preserveMigrationSource bool,
-) (precheck.Job, bool, error) {
-	if !filepath.IsLocal(f.Path) {
-		return precheck.Job{}, false, ErrPathSanitization
-	}
-
+// SendPrecheckJob creates a precheck job for the file and sends it to pjch.
+func (f *ModpackVersionFile) SendPrecheckJob(pjch chan<- precheck.Job, serverIgnoreCurseForgeProjects []int64) error {
 	url := f.URL
 	if url == "" {
 		if f.CurseForge == nil {
-			return precheck.Job{}, false, ErrMissingURL
+			return ErrMissingURL
 		}
 		url = f.CurseForge.DownloadURL(f.Name)
 	}
 
-	var destinationPath, secondaryDestinationPath string
-	if !f.ServerOnly && clientPath != "" {
-		destinationPath = filepath.Join(clientPath, f.Path, f.Name)
-	}
-	if !f.ClientOnly && serverPath != "" && (f.CurseForge == nil || !slices.Contains(serverIgnoreCurseForgeProjects, f.CurseForge.Project)) {
-		secondaryDestinationPath = filepath.Join(serverPath, f.Path, f.Name)
-	}
-
-	if destinationPath == "" {
-		if secondaryDestinationPath == "" {
-			return precheck.Job{}, false, nil
-		}
-		destinationPath = secondaryDestinationPath
-		secondaryDestinationPath = ""
-	}
-
-	if migrateFromPath != "" {
-		migrateFromPath = filepath.Join(migrateFromPath, f.Path, f.Name)
+	path := filepath.Join(f.Path, f.Name)
+	if path == "" {
+		return ErrMissingPath
 	}
 
 	sum, err := hex.DecodeString(f.SHA1)
 	if err != nil {
-		return precheck.Job{}, false, fmt.Errorf("failed to decode SHA1: %w", err)
+		return fmt.Errorf("failed to decode SHA1: %w", err)
 	}
 
-	return precheck.Job{
-		DownloadURL:              url,
-		UserAgent:                APIUserAgent,
-		MigrateFromPath:          migrateFromPath,
-		PreserveMigrationSource:  preserveMigrationSource,
-		DestinationPath:          destinationPath,
-		SecondaryDestinationPath: secondaryDestinationPath,
-		NewHash:                  sha1.New,
-		Sum:                      sum,
-		Size:                     f.Size,
-	}, true, nil
+	pjch <- precheck.Job{
+		DownloadURL:     url,
+		UserAgent:       APIUserAgent,
+		DestinationPath: path,
+		IsClientFile:    !f.ServerOnly,
+		IsServerFile:    !f.ClientOnly && (f.CurseForge == nil || !slices.Contains(serverIgnoreCurseForgeProjects, f.CurseForge.Project)),
+		NewHash:         sha1.New,
+		Sum:             sum,
+		Size:            f.Size,
+	}
+
+	return nil
 }
 
 // CurseForgeFile is a file under a CurseForge project.

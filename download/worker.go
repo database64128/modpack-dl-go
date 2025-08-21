@@ -179,7 +179,7 @@ type WorkerFleet struct {
 func NewWorkerFleet(ctx context.Context, logger *slog.Logger, client *http.Client, numWorkers int, jobCh <-chan Job) *WorkerFleet {
 	var wf WorkerFleet
 	wf.wg.Add(numWorkers)
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		go func() {
 			defer wf.wg.Done()
 			done := ctx.Done()
