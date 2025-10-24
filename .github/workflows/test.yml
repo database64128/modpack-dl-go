@@ -38,7 +38,7 @@ jobs:
         run: go test -v ./...
 
       - name: Upload Binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: modpack-dl-go-${{ github.sha }}-${{ matrix.os }}-x86-64
           path: modpack-dl-go*
