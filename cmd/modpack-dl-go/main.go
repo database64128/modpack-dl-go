@@ -20,6 +20,9 @@ import (
 	"github.com/lmittmann/tint"
 )
 
+// CurseForge says the API key is for analytics. We are all Prism Launcher users, so we hardcode the same key as they do.
+const prismLauncherCurseForgeAPIKey = "$2a$10$wuAJuNZuted3NORVmpgUC.m8sI.pv1tOPKZyBgLFGjxFp/br0lZCC"
+
 var (
 	modpackID                      int64
 	versionID                      int64
@@ -29,6 +32,7 @@ var (
 	preserveMigrationSource        bool
 	curseforge                     bool
 	downloadConcurrency            int
+	curseForgeAPIKey               string
 	serverIgnoreCurseForgeProjects int64s
 	logLevel                       slog.Level
 )
@@ -42,6 +46,7 @@ func init() {
 	flag.BoolVar(&preserveMigrationSource, "preserveMigrationSource", false, "Migrate by copying instead of moving files")
 	flag.BoolVar(&curseforge, "curseforge", false, "ID is a CurseForge project ID instead of a modpacks.ch public modpack ID")
 	flag.IntVar(&downloadConcurrency, "downloadConcurrency", 32, "Optional. Number of concurrent downloads")
+	flag.StringVar(&curseForgeAPIKey, "curseForgeAPIKey", prismLauncherCurseForgeAPIKey, "Optional. Override the default CurseForge API key for downloads")
 	flag.Var(&serverIgnoreCurseForgeProjects, "serverIgnoreCurseForgeProjects", "Optional. Comma-separated list of CurseForge project IDs to ignore when downloading the server")
 	flag.TextVar(&logLevel, "logLevel", slog.LevelInfo, "Log level")
 }
@@ -169,7 +174,7 @@ func main() {
 
 	for i := range versionManifest.Files {
 		file := &versionManifest.Files[i]
-		if err := file.SendPrecheckJob(pjch, serverIgnoreCurseForgeProjects); err != nil {
+		if err := file.SendPrecheckJob(pjch, curseForgeAPIKey, serverIgnoreCurseForgeProjects); err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to create precheck job",
 				slog.Int64("modpackID", versionManifest.Parent),
 				slog.Int64("versionID", versionManifest.ID),

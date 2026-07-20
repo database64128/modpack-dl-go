@@ -300,7 +300,7 @@ type ModpackVersionFile struct {
 }
 
 // SendPrecheckJob creates a precheck job for the file and sends it to pjch.
-func (f *ModpackVersionFile) SendPrecheckJob(pjch chan<- precheck.Job, serverIgnoreCurseForgeProjects []int64) error {
+func (f *ModpackVersionFile) SendPrecheckJob(pjch chan<- precheck.Job, curseForgeAPIKey string, serverIgnoreCurseForgeProjects []int64) error {
 	url := f.URL
 	if url == "" {
 		if f.CurseForge == nil {
@@ -320,14 +320,15 @@ func (f *ModpackVersionFile) SendPrecheckJob(pjch chan<- precheck.Job, serverIgn
 	}
 
 	pjch <- precheck.Job{
-		DownloadURL:     url,
-		UserAgent:       APIUserAgent,
-		DestinationPath: path,
-		IsClientFile:    !f.ServerOnly,
-		IsServerFile:    !f.ClientOnly && (f.CurseForge == nil || !slices.Contains(serverIgnoreCurseForgeProjects, f.CurseForge.Project)),
-		NewHash:         sha1.New,
-		Sum:             sum,
-		Size:            f.Size,
+		DownloadURL:      url,
+		UserAgent:        APIUserAgent,
+		CurseForgeAPIKey: curseForgeAPIKey,
+		DestinationPath:  path,
+		IsClientFile:     !f.ServerOnly,
+		IsServerFile:     !f.ClientOnly && (f.CurseForge == nil || !slices.Contains(serverIgnoreCurseForgeProjects, f.CurseForge.Project)),
+		NewHash:          sha1.New,
+		Sum:              sum,
+		Size:             f.Size,
 	}
 
 	return nil

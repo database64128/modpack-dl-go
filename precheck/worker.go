@@ -33,6 +33,11 @@ type Job struct {
 	// If empty, Go's default behavior is preserved.
 	UserAgent string
 
+	// CurseForgeAPIKey is the X-Api-Key header value to set for requests to edge.forgecdn.net.
+	//
+	// If empty, the header key is not set.
+	CurseForgeAPIKey string
+
 	// DestinationPath is the destination path for downloading the file
 	// or migrating an existing file to.
 	DestinationPath string
@@ -144,6 +149,7 @@ func (j *Job) sendDownloadJob(djch chan<- download.Job, f1, f2 *os.File) {
 	djch <- download.Job{
 		DownloadURL:         j.DownloadURL,
 		UserAgent:           j.UserAgent,
+		CurseForgeAPIKey:    j.CurseForgeAPIKey,
 		TargetFile:          f1,
 		SecondaryTargetFile: f2,
 	}

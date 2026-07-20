@@ -21,6 +21,11 @@ type Job struct {
 	// If empty, Go's default behavior is preserved.
 	UserAgent string
 
+	// CurseForgeAPIKey is the X-Api-Key header value to set for requests to edge.forgecdn.net.
+	//
+	// If empty, the header key is not set.
+	CurseForgeAPIKey string
+
 	// TargetFile is the target file.
 	TargetFile *os.File
 
@@ -76,6 +81,10 @@ func (j *Job) run(ctx context.Context, logger *slog.Logger, client *http.Client)
 
 	if j.UserAgent != "" {
 		req.Header["User-Agent"] = []string{j.UserAgent}
+	}
+
+	if j.CurseForgeAPIKey != "" && req.URL.Hostname() == "edge.forgecdn.net" {
+		req.Header["X-Api-Key"] = []string{j.CurseForgeAPIKey}
 	}
 
 	resp, err := client.Do(req)
