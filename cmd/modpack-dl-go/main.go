@@ -31,6 +31,7 @@ var (
 	migrateFromPath                string
 	preserveMigrationSource        bool
 	curseforge                     bool
+	ftb                            bool
 	downloadConcurrency            int
 	curseForgeAPIKey               string
 	serverIgnoreCurseForgeProjects int64s
@@ -45,6 +46,7 @@ func init() {
 	flag.StringVar(&migrateFromPath, "migrateFromPath", "", "Optional. Migrate the modpack from the specified path")
 	flag.BoolVar(&preserveMigrationSource, "preserveMigrationSource", false, "Migrate by copying instead of moving files")
 	flag.BoolVar(&curseforge, "curseforge", false, "ID is a CurseForge project ID instead of a modpacks.ch public modpack ID")
+	flag.BoolVar(&ftb, "ftb", false, "ID is an FTB modpack ID instead of a modpacks.ch public modpack ID")
 	flag.IntVar(&downloadConcurrency, "downloadConcurrency", 32, "Optional. Number of concurrent downloads")
 	flag.StringVar(&curseForgeAPIKey, "curseForgeAPIKey", prismLauncherCurseForgeAPIKey, "Optional. Override the default CurseForge API key for downloads")
 	flag.Var(&serverIgnoreCurseForgeProjects, "serverIgnoreCurseForgeProjects", "Optional. Comma-separated list of CurseForge project IDs to ignore when downloading the server")
@@ -112,10 +114,13 @@ func main() {
 	}
 
 	var client modpacksch.ModpackClient
-	if !curseforge {
-		client = modpacksch.DefaultPublicModpackClient
-	} else {
+	switch {
+	case curseforge:
 		client = modpacksch.DefaultCurseForgeModpackClient
+	case ftb:
+		client = modpacksch.DefaultFTBModpackClient
+	default:
+		client = modpacksch.DefaultPublicModpackClient
 	}
 
 	modpackManifest, err := client.GetModpackManifest(ctx, modpackID)
@@ -153,15 +158,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger.LogAttrs(ctx, slog.LevelInfo, "Got modpack version manifest",
-		slog.Int64("modpackID", versionManifest.Parent),
-		slog.Int64("versionID", versionManifest.ID),
-		slog.String("name", versionManifest.Name),
-		slog.String("type", versionManifest.Type),
-		slog.Time("updated", versionManifest.Updated.Time),
-		slog.Int("fileCount", len(versionManifest.Files)),
-		slog.Any("targets", versionManifest.Targets),
-	)
+	if logger.Enabled(ctx, slog.LevelInfo) {
+		info := versionManifest.ModpackVersionManifestInfo()
+		logger.LogAttrs(ctx, slog.LevelInfo, "Got modpack version manifest",
+			slog.Int64("modpackID", info.ModpackID),
+			slog.Int64("versionID", info.VersionID),
+			slog.String("name", info.Name),
+			slog.String("type", info.Type),
+			slog.Time("updated", info.Updated),
+			slog.Int("fileCount", info.FileCount),
+			slog.Any("targets", info.Targets),
+		)
+	}
 
 	if clientRoot == nil && serverRoot == nil {
 		logger.LogAttrs(ctx, slog.LevelInfo, "User did not ask to download anything")
@@ -172,16 +180,21 @@ func main() {
 	pwf := precheck.NewWorkerFleet(ctx, logger, pjch, clientRoot, serverRoot, migrateFromRoot, preserveMigrationSource)
 	dwf := download.NewWorkerFleet(ctx, logger, http.DefaultClient, downloadConcurrency, pwf.DownloadJobChannel())
 
-	for i := range versionManifest.Files {
-		file := &versionManifest.Files[i]
+	for file := range versionManifest.ModpackVersionFiles() {
 		if err := file.SendPrecheckJob(pjch, curseForgeAPIKey, serverIgnoreCurseForgeProjects); err != nil {
-			logger.LogAttrs(ctx, slog.LevelWarn, "Failed to create precheck job",
-				slog.Int64("modpackID", versionManifest.Parent),
-				slog.Int64("versionID", versionManifest.ID),
-				slog.String("name", file.Name),
-				slog.String("path", file.Path),
-				tint.Err(err),
-			)
+			if logger.Enabled(ctx, slog.LevelWarn) {
+				info := file.ModpackVersionFileInfo()
+				logger.LogAttrs(ctx, slog.LevelWarn, "Failed to create precheck job",
+					slog.Int64("modpackID", modpackID),
+					slog.Int64("versionID", versionID),
+					slog.Int64("fileID", info.ID),
+					slog.String("fileName", info.Name),
+					slog.String("fileType", info.Type),
+					slog.String("filePath", info.Path),
+					slog.String("fileURL", info.URL),
+					tint.Err(err),
+				)
+			}
 			continue
 		}
 	}
