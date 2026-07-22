@@ -4,6 +4,7 @@
 package modpacksch
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -13,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"io"
 	"iter"
 	"net/http"
 	"net/url"
@@ -218,8 +220,23 @@ func doGetRequest[V any](ctx context.Context, client *http.Client, url string, u
 		return v, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	if err = json.NewDecoder(resp.Body).Decode(&v); err != nil {
-		return v, fmt.Errorf("failed to decode response: %w", err)
+	const maxResponseBodySize = 1 << 30 // 1 GiB
+	if resp.ContentLength > maxResponseBodySize {
+		return v, fmt.Errorf("response body too large: %d bytes (max %d bytes)", resp.ContentLength, maxResponseBodySize)
+	}
+	var buf bytes.Buffer
+	buf.Grow(max(0, int(resp.ContentLength)))
+	r := io.LimitReader(resp.Body, maxResponseBodySize+1)
+	n, err := buf.ReadFrom(r)
+	if err != nil {
+		return v, fmt.Errorf("failed to read response body: %w", err)
+	}
+	if n > maxResponseBodySize {
+		return v, fmt.Errorf("response body too large: %d bytes (max %d bytes)", n, maxResponseBodySize)
+	}
+
+	if err := json.Unmarshal(buf.Bytes(), &v); err != nil {
+		return v, fmt.Errorf("failed to unmarshal response body: %w", err)
 	}
 	return v, nil
 }
