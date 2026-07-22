@@ -38,9 +38,8 @@ type Job struct {
 	// If empty, the header key is not set.
 	CurseForgeAPIKey string
 
-	// DestinationPath is the destination path for downloading the file
-	// or migrating an existing file to.
-	DestinationPath string
+	// FilePath is the designated path for the file, relative to the modpack root.
+	FilePath string
 
 	// IsClientFile indicates whether the file should be included in the modpack client.
 	IsClientFile bool
@@ -164,11 +163,11 @@ func (j *Job) runOneDestination(
 	migrateFromRoot *os.Root,
 	preserveMigrationSource bool,
 ) {
-	dst, ok, err := j.createAndCheckFile(destinationRoot, j.DestinationPath)
+	dst, ok, err := j.createAndCheckFile(destinationRoot, j.FilePath)
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to create or check file at destination path",
 			slog.String("root", destinationRoot.Name()),
-			slog.String("path", j.DestinationPath),
+			slog.String("path", j.FilePath),
 			tint.Err(err),
 		)
 		return
@@ -176,7 +175,7 @@ func (j *Job) runOneDestination(
 	if ok {
 		logger.LogAttrs(ctx, slog.LevelInfo, "Skipping existing file",
 			slog.String("root", destinationRoot.Name()),
-			slog.String("path", j.DestinationPath),
+			slog.String("path", j.FilePath),
 		)
 		dst.Close()
 		return
@@ -187,11 +186,11 @@ func (j *Job) runOneDestination(
 		return
 	}
 
-	src, ok, err := j.openAndCheckFile(migrateFromRoot, j.DestinationPath)
+	src, ok, err := j.openAndCheckFile(migrateFromRoot, j.FilePath)
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to check file at migration source path",
 			slog.String("root", migrateFromRoot.Name()),
-			slog.String("path", j.DestinationPath),
+			slog.String("path", j.FilePath),
 			tint.Err(err),
 		)
 		dst.Close()
@@ -290,21 +289,21 @@ func (j *Job) runTwoDestinations(
 	migrateFromRoot *os.Root,
 	preserveMigrationSource bool,
 ) {
-	dst1, ok1, err := j.createAndCheckFile(destinationRoot, j.DestinationPath)
+	dst1, ok1, err := j.createAndCheckFile(destinationRoot, j.FilePath)
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to create or check file at destination path",
 			slog.String("root", destinationRoot.Name()),
-			slog.String("path", j.DestinationPath),
+			slog.String("path", j.FilePath),
 			tint.Err(err),
 		)
 		return
 	}
 
-	dst2, ok2, err := j.createAndCheckFile(secondaryDestinationRoot, j.DestinationPath)
+	dst2, ok2, err := j.createAndCheckFile(secondaryDestinationRoot, j.FilePath)
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to create or check file at secondary destination path",
 			slog.String("root", secondaryDestinationRoot.Name()),
-			slog.String("path", j.DestinationPath),
+			slog.String("path", j.FilePath),
 			tint.Err(err),
 		)
 		dst1.Close()
@@ -316,7 +315,7 @@ func (j *Job) runTwoDestinations(
 		logger.LogAttrs(ctx, slog.LevelInfo, "Skipping existing files",
 			slog.String("root", destinationRoot.Name()),
 			slog.String("secondaryRoot", secondaryDestinationRoot.Name()),
-			slog.String("path", j.DestinationPath),
+			slog.String("path", j.FilePath),
 		)
 		dst1.Close()
 		dst2.Close()
@@ -359,11 +358,11 @@ func (j *Job) runTwoDestinations(
 		return
 	}
 
-	src, srcOK, err := j.openAndCheckFile(migrateFromRoot, j.DestinationPath)
+	src, srcOK, err := j.openAndCheckFile(migrateFromRoot, j.FilePath)
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelWarn, "Failed to check file at migration source path",
 			slog.String("root", migrateFromRoot.Name()),
-			slog.String("path", j.DestinationPath),
+			slog.String("path", j.FilePath),
 			tint.Err(err),
 		)
 		dst1.Close()
